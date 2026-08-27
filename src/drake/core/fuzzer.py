@@ -1,0 +1,112 @@
+"""Motor de generación de casos de prueba aleatorios y ejecución de fuzzing en DRAKE."""
+
+from __future__ import annotations
+
+import random
+import shutil
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from typing import List, Tuple
+
+from drake.core.models import CasoFuzz, ReporteFuzzing
+
+PAYLOADS_FRONTERA = [
+    "",
+    "0\n",
+    "-1\n",
+    "1\n",
+    "2147483647\n",       # INT_MAX
+    "-2147483648\n",      # INT_MIN
+    "4294967295\n",       # UINT_MAX
+    "A" * 1024 + "\n",    # Búfer largo
+    "A" * 4096 + "\n",
+    "%s%s%s%s%s\n",       # Format string
+    "0 0 0 0\n",
+    "\x00\n",
+    "\n\n\n\n",
+]
+
+
+def generar_payload_mutado(iteracion: int) -> str:
+    """Genera un payload de entrada con mutaciones aleatorias y casos límite."""
+    if iteracion < len(PAYLOADS_FRONTERA):
+        return PAYLOADS_FRONTERA[iteracion]
+
+    tipo = random.choice(["int_random", "string_random", "mixed"])
+    if tipo == "int_random":
+        nums = [str(random.randint(-100000, 100000)) for _ in range(random.randint(1, 5))]
+        return " ".join(nums) + "\n"
+    elif tipo == "string_random":
+        caracteres = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \t\n!@#$%^&*()"
+        largo = random.randint(1, 256)
+        return "".join(random.choice(caracteres) for _ in range(largo)) + "\n"
+    else:
+        return f"{random.randint(-100, 100)} {'X' * random.randint(10, 100)}\n"
+
+
+def ejecutar_fuzzing(
+    archivo_c: Path,
+    total_runs: int = 50,
+    timeout_por_run: float = 1.0,
+) -> ReporteFuzzing:
+    """Compila el programa y ejecuta múltiples corridas con payloads de fuzzing."""
+    archivo_c = Path(archivo_c)
+    if not archivo_c.is_file():
+        raise FileNotFoundError(f"No se encontró el archivo: {archivo_c}")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        binario = tmp_path / "prog_fuzz"
+
+        gcc = shutil.which("gcc") or "gcc"
+        res_comp = subprocess.run(
+            [gcc, "-g", "-O0", str(archivo_c.resolve()), "-o", str(binario.resolve()), "-lm"],
+            capture_output=True,
+            text=True,
+        )
+        if res_comp.returncode != 0:
+            return ReporteFuzzing(
+                archivo=archivo_c,
+                total_ejecuciones=0,
+                total_crashes=1,
+                crashes=[CasoFuzz(1, "", res_comp.returncode, True, 0.0, "COMPILATION_ERROR")],
+            )
+
+        crashes: List[CasoFuzz] = []
+
+        for i in range(total_runs):
+            payload = generar_payload_mutado(i)
+            t0 = time.perf_counter()
+            try:
+                res = subprocess.run(
+                    [str(binario.resolve())],
+                    input=payload,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_por_run,
+                )
+                t_ms = (time.perf_counter() - t0) * 1000.0
+                ret = res.returncode
+
+                if ret < 0:
+                    sig = -ret
+                    sig_name = "SIGSEGV" if sig == 11 else "SIGABRT" if sig == 6 else "SIGFPE" if sig == 8 else f"SIGNAL_{sig}"
+                    crashes.append(CasoFuzz(i + 1, payload, ret, True, t_ms, sig_name))
+                elif ret > 128:
+                    crashes.append(CasoFuzz(i + 1, payload, ret, True, t_ms, f"SIGNAL_{ret - 128}"))
+
+            except subprocess.TimeoutExpired:
+                t_ms = (time.perf_counter() - t0) * 1000.0
+                crashes.append(CasoFuzz(i + 1, payload, 124, True, t_ms, "TIMEOUT"))
+            except Exception as e:
+                t_ms = (time.perf_counter() - t0) * 1000.0
+                crashes.append(CasoFuzz(i + 1, payload, 1, True, t_ms, str(e)))
+
+        return ReporteFuzzing(
+            archivo=archivo_c,
+            total_ejecuciones=total_runs,
+            total_crashes=len(crashes),
+            crashes=crashes,
+        )

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drake"
+version = "0.1.0"
+description = "Fuzzer pedagógico guiado por límites y analizador de cobertura dinámica en C"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+drake = "drake.cli:main"
+
+[project.entry-points."ripley.plugins"]
+fuzzing = "drake.ripley_plugin:DrakePlugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drake"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
