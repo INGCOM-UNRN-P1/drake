@@ -347,3 +347,12 @@ Podés encadenar `drake` con otras herramientas del ecosistema en una única lí
 drake fuzz --binary ./bin/programa | hal inspect --pipe
 ````
 
+---
+
+(manual-drake-seccion-plugins)=
+## 9. Extensión, Desarrollo de Plugins y API Python
+
+Para crear tus propias reglas, conectores de evaluación o integrar `drake` programáticamente en pipelines de CI/CD:
+
+- 👉 **Consultá la guía completa:** [Guía de Extensión y Creación de Plugins](plugins.md)
+
