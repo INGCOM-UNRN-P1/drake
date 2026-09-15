@@ -47,7 +47,10 @@ def main_callback(
 
 def generar_seccion_markdown(reporte) -> str:
     """Genera sección de auditoría de robustez y fuzzing para Dredd."""
-    lines = ["## Robustez y Fuzzing de Límites (Drake)\n"]
+    lines = [
+        "<!-- dredd-section: drake v1.0.0 -->\n",
+        "## Robustez y Fuzzing de Límites (Drake)\n",
+    ]
     lines.append(f"- **Archivo analizado:** `{reporte.archivo.name}`")
     lines.append(f"- **Ejecuciones de prueba:** {reporte.total_ejecuciones}")
     lines.append(f"- **Fallos / Crashes detectados:** {reporte.total_crashes}\n")
@@ -58,7 +61,9 @@ def generar_seccion_markdown(reporte) -> str:
         lines.append("| Run # | Señal / Diagnóstico | Tiempo | Payload de Entrada |")
         lines.append("| :---: | :--- | :---: | :--- |")
         for c in reporte.crashes[:10]:
-            lines.append(f"| {c.id_caso} | **{c.senal_error or 'CRASH'}** | {c.tiempo_ms:.1f} ms | `{repr(c.payload_input[:30])}` |")
+            diag_limpio = (c.senal_error or "CRASH").replace("|", "&#124;")
+            payload_str = repr(c.payload_input[:30]).replace("|", "&#124;")
+            lines.append(f"| {c.id_caso} | **{diag_limpio}** | {c.tiempo_ms:.1f} ms | `{payload_str}` |")
         lines.append("")
     return "\n".join(lines)
 

@@ -31,6 +31,7 @@ class ReporteFuzzing:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "schema_version": "1.0.0",
             "archivo": str(self.archivo),
             "ok": self.ok,
             "total_ejecuciones": self.total_ejecuciones,
