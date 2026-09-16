@@ -46,6 +46,25 @@ def generar_payload_mutado(iteracion: int) -> str:
         return f"{random.randint(-100, 100)} {'X' * random.randint(10, 100)}\n"
 
 
+def _compilar_con_daedalus(archivo_c: Path, binario: Path) -> Optional[Tuple[bool, int, str]]:
+    try:
+        from daedalus.core.compiler import compilar_archivos
+        res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0"])
+        return res.exito, res.codigo_retorno, res.stderr_crudo
+    except ImportError:
+        import sys
+        sibling = Path(__file__).resolve().parents[4] / "daedalus" / "src"
+        if sibling.is_dir() and str(sibling) not in sys.path:
+            sys.path.insert(0, str(sibling))
+            try:
+                from daedalus.core.compiler import compilar_archivos
+                res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0"])
+                return res.exito, res.codigo_retorno, res.stderr_crudo
+            except ImportError:
+                return None
+        return None
+
+
 def ejecutar_fuzzing(
     archivo_c: Path,
     total_runs: int = 50,
@@ -60,19 +79,30 @@ def ejecutar_fuzzing(
         tmp_path = Path(tmp_dir)
         binario = tmp_path / "prog_fuzz"
 
-        gcc = shutil.which("gcc") or "gcc"
-        res_comp = subprocess.run(
-            [gcc, "-g", "-O0", str(archivo_c.resolve()), "-o", str(binario.resolve()), "-lm"],
-            capture_output=True,
-            text=True,
-        )
-        if res_comp.returncode != 0:
-            return ReporteFuzzing(
-                archivo=archivo_c,
-                total_ejecuciones=0,
-                total_crashes=1,
-                crashes=[CasoFuzz(1, "", res_comp.returncode, True, 0.0, "COMPILATION_ERROR")],
+        daed_res = _compilar_con_daedalus(archivo_c, binario)
+        if daed_res is not None:
+            ok, rc, stderr = daed_res
+            if not ok:
+                return ReporteFuzzing(
+                    archivo=archivo_c,
+                    total_ejecuciones=0,
+                    total_crashes=1,
+                    crashes=[CasoFuzz(1, "", rc, True, 0.0, "COMPILATION_ERROR")],
+                )
+        else:
+            gcc = shutil.which("gcc") or "gcc"
+            res_comp = subprocess.run(
+                [gcc, "-g", "-O0", str(archivo_c.resolve()), "-o", str(binario.resolve()), "-lm"],
+                capture_output=True,
+                text=True,
             )
+            if res_comp.returncode != 0:
+                return ReporteFuzzing(
+                    archivo=archivo_c,
+                    total_ejecuciones=0,
+                    total_crashes=1,
+                    crashes=[CasoFuzz(1, "", res_comp.returncode, True, 0.0, "COMPILATION_ERROR")],
+                )
 
         crashes: List[CasoFuzz] = []
 
