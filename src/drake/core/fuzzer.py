@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import List, Tuple
 
+from drake.core.cobertura import FLAGS_COBERTURA, medir_cobertura
 from drake.core.models import CasoFuzz, ReporteFuzzing
 
 PAYLOADS_FRONTERA = [
@@ -49,7 +50,7 @@ def generar_payload_mutado(iteracion: int) -> str:
 def _compilar_con_daedalus(archivo_c: Path, binario: Path) -> Optional[Tuple[bool, int, str]]:
     try:
         from daedalus.core.compiler import compilar_archivos
-        res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0"])
+        res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0", *FLAGS_COBERTURA])
         return res.exito, res.codigo_retorno, res.stderr_crudo
     except ImportError:
         import sys
@@ -58,7 +59,7 @@ def _compilar_con_daedalus(archivo_c: Path, binario: Path) -> Optional[Tuple[boo
             sys.path.insert(0, str(sibling))
             try:
                 from daedalus.core.compiler import compilar_archivos
-                res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0"])
+                res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0", *FLAGS_COBERTURA])
                 return res.exito, res.codigo_retorno, res.stderr_crudo
             except ImportError:
                 return None
@@ -92,7 +93,7 @@ def ejecutar_fuzzing(
         else:
             gcc = shutil.which("gcc") or "gcc"
             res_comp = subprocess.run(
-                [gcc, "-g", "-O0", str(archivo_c.resolve()), "-o", str(binario.resolve()), "-lm"],
+                [gcc, "-g", "-O0", *FLAGS_COBERTURA, str(archivo_c.resolve()), "-o", str(binario.resolve()), "-lm"],
                 capture_output=True,
                 text=True,
             )
@@ -134,9 +135,14 @@ def ejecutar_fuzzing(
                 t_ms = (time.perf_counter() - t0) * 1000.0
                 crashes.append(CasoFuzz(i + 1, payload, 1, True, t_ms, str(e)))
 
+        cobertura = medir_cobertura(archivo_c, tmp_path)
+
         return ReporteFuzzing(
             archivo=archivo_c,
             total_ejecuciones=total_runs,
             total_crashes=len(crashes),
             crashes=crashes,
+            cobertura_lineas_porcentaje=cobertura.porcentaje,
+            cobertura_medida=cobertura.medida,
+            cobertura_detalle=cobertura.resumen,
         )

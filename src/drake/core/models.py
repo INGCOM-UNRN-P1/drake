@@ -23,7 +23,12 @@ class ReporteFuzzing:
     total_ejecuciones: int
     total_crashes: int
     crashes: List[CasoFuzz] = field(default_factory=list)
-    cobertura_lineas_porcentaje: float = 100.0
+    # Nunca se asignaba: el reporte informaba 100 % de cobertura aunque los
+    # payloads no hubieran entrado en ninguna rama. Ahora se completa con lo
+    # que mide gcov, y `cobertura_medida` distingue el dato real del ausente.
+    cobertura_lineas_porcentaje: Optional[float] = None
+    cobertura_medida: bool = False
+    cobertura_detalle: str = ""
 
     @property
     def ok(self) -> bool:
@@ -36,7 +41,13 @@ class ReporteFuzzing:
             "ok": self.ok,
             "total_ejecuciones": self.total_ejecuciones,
             "total_crashes": self.total_crashes,
-            "cobertura_lineas": round(self.cobertura_lineas_porcentaje, 1),
+            "cobertura_medida": self.cobertura_medida,
+            "cobertura_lineas": (
+                round(self.cobertura_lineas_porcentaje, 1)
+                if self.cobertura_lineas_porcentaje is not None
+                else None
+            ),
+            "cobertura_detalle": self.cobertura_detalle,
             "crashes": [
                 {
                     "id": c.id_caso,
