@@ -74,6 +74,7 @@ def fuzz_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a someter a fuzzing."),
     runs: int = typer.Option(50, "--runs", "-n", help="Cantidad de ejecuciones con mutaciones."),
     timeout: float = typer.Option(1.0, "--timeout", "-t", help="Timeout máximo por corrida en segundos."),
+    seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla para reproducir una campaña exacta (por defecto al azar; se informa en el reporte)."),
     json_output: bool = typer.Option(False, "--json", help="Salida estructurada en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
 ) -> None:
@@ -82,7 +83,7 @@ def fuzz_cmd(
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
 
-    reporte = ejecutar_fuzzing(fuente, total_runs=runs, timeout_por_run=timeout)
+    reporte = ejecutar_fuzzing(fuente, total_runs=runs, timeout_por_run=timeout, seed=seed)
 
     if output_md:
         md_text = generar_seccion_markdown(reporte)
@@ -129,12 +130,13 @@ def report_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a someter a fuzzing."),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Ruta de destino del archivo Markdown."),
     runs: int = typer.Option(50, "--runs", "-n", help="Cantidad de ejecuciones con mutaciones."),
+    seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla para reproducir una campaña exacta."),
 ) -> None:
     """Genera directamente la sección de reporte Markdown de DRAKE para Dredd."""
     if not fuente.is_file():
         err_console.print(f"[red]Error:[/red] No se encontró el archivo '{fuente}'.")
         raise typer.Exit(code=2)
-    reporte = ejecutar_fuzzing(fuente, total_runs=runs)
+    reporte = ejecutar_fuzzing(fuente, total_runs=runs, seed=seed)
     md_content = generar_seccion_markdown(reporte)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)

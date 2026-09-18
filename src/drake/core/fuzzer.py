@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from drake.core.cobertura import FLAGS_COBERTURA, medir_cobertura
 from drake.core.models import CasoFuzz, ReporteFuzzing
@@ -30,21 +30,28 @@ PAYLOADS_FRONTERA = [
 ]
 
 
-def generar_payload_mutado(iteracion: int) -> str:
-    """Genera un payload de entrada con mutaciones aleatorias y casos límite."""
+def generar_payload_mutado(iteracion: int, rng: Optional[random.Random] = None) -> str:
+    """Genera un payload de entrada con mutaciones aleatorias y casos límite.
+
+    Con un `rng` sembrado la secuencia es reproducible. Antes se usaba el
+    módulo global `random` sin semilla: un crash encontrado en una corrida no se
+    podía volver a provocar, y sin eso no se puede confirmar que el arreglo
+    del estudiante lo resuelve.
+    """
     if iteracion < len(PAYLOADS_FRONTERA):
         return PAYLOADS_FRONTERA[iteracion]
 
-    tipo = random.choice(["int_random", "string_random", "mixed"])
+    rng = rng or random.Random()
+    tipo = rng.choice(["int_random", "string_random", "mixed"])
     if tipo == "int_random":
-        nums = [str(random.randint(-100000, 100000)) for _ in range(random.randint(1, 5))]
+        nums = [str(rng.randint(-100000, 100000)) for _ in range(rng.randint(1, 5))]
         return " ".join(nums) + "\n"
     elif tipo == "string_random":
         caracteres = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 \t\n!@#$%^&*()"
-        largo = random.randint(1, 256)
-        return "".join(random.choice(caracteres) for _ in range(largo)) + "\n"
+        largo = rng.randint(1, 256)
+        return "".join(rng.choice(caracteres) for _ in range(largo)) + "\n"
     else:
-        return f"{random.randint(-100, 100)} {'X' * random.randint(10, 100)}\n"
+        return f"{rng.randint(-100, 100)} {'X' * rng.randint(10, 100)}\n"
 
 
 def _compilar_con_daedalus(archivo_c: Path, binario: Path) -> Optional[Tuple[bool, int, str]]:
@@ -70,9 +77,17 @@ def ejecutar_fuzzing(
     archivo_c: Path,
     total_runs: int = 50,
     timeout_por_run: float = 1.0,
+    seed: Optional[int] = None,
 ) -> ReporteFuzzing:
-    """Compila el programa y ejecuta múltiples corridas con payloads de fuzzing."""
+    """Compila el programa y ejecuta múltiples corridas con payloads de fuzzing.
+
+    Sin `seed` se elige una al azar, pero siempre queda registrada en el reporte
+    para poder repetir exactamente la misma campaña con `--seed`.
+    """
     archivo_c = Path(archivo_c)
+    if seed is None:
+        seed = random.SystemRandom().randrange(2**32)
+    rng = random.Random(seed)
     if not archivo_c.is_file():
         raise FileNotFoundError(f"No se encontró el archivo: {archivo_c}")
 
@@ -108,7 +123,7 @@ def ejecutar_fuzzing(
         crashes: List[CasoFuzz] = []
 
         for i in range(total_runs):
-            payload = generar_payload_mutado(i)
+            payload = generar_payload_mutado(i, rng)
             t0 = time.perf_counter()
             try:
                 res = subprocess.run(
@@ -142,6 +157,7 @@ def ejecutar_fuzzing(
             total_ejecuciones=total_runs,
             total_crashes=len(crashes),
             crashes=crashes,
+            semilla=seed,
             cobertura_lineas_porcentaje=cobertura.porcentaje,
             cobertura_medida=cobertura.medida,
             cobertura_detalle=cobertura.resumen,

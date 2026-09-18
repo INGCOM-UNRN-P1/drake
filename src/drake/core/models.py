@@ -23,6 +23,9 @@ class ReporteFuzzing:
     total_ejecuciones: int
     total_crashes: int
     crashes: List[CasoFuzz] = field(default_factory=list)
+    # Semilla de la campaña: con ella se reproduce exactamente la misma
+    # secuencia de payloads (`drake fuzz --seed N`).
+    semilla: Optional[int] = None
     # Nunca se asignaba: el reporte informaba 100 % de cobertura aunque los
     # payloads no hubieran entrado en ninguna rama. Ahora se completa con lo
     # que mide gcov, y `cobertura_medida` distingue el dato real del ausente.
@@ -41,6 +44,7 @@ class ReporteFuzzing:
             "ok": self.ok,
             "total_ejecuciones": self.total_ejecuciones,
             "total_crashes": self.total_crashes,
+            "semilla": self.semilla,
             "cobertura_medida": self.cobertura_medida,
             "cobertura_lineas": (
                 round(self.cobertura_lineas_porcentaje, 1)
