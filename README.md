@@ -15,7 +15,6 @@ DRAKE es una herramienta de fuzzing liviana que genera entradas con valores lím
 ### Qué no cubre (Límites y Delegación)
 - Aislamiento del proceso con namespaces y cgroups (delegado a `nostromo`).
 - Diagnóstico forense detallado del core dump con GDB (delegado a `hal`).
-- Análisis adversarial guiado por caminos simbólicos (delegado a `smith`).
 
 ---
 
