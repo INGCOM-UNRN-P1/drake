@@ -105,7 +105,10 @@ def fuzz_cmd(
         ))
         raise typer.Exit(code=0)
 
-    console.print(f"\n[bold red]💥 Se detectaron {reporte.total_crashes} fallos durante el fuzzing:[/bold red]\n")
+    console.print(
+        f"\n[bold red]💥 Se detectaron {reporte.total_crashes} crashes y "
+        f"{reporte.total_timeouts} timeouts durante el fuzzing:[/bold red]\n"
+    )
 
     tabla = Table(title=f"Crashes Detectados por Fuzzing en {fuente.name}")
     tabla.add_column("# Run", justify="center")
@@ -113,7 +116,7 @@ def fuzz_cmd(
     tabla.add_column("Tiempo", justify="right")
     tabla.add_column("Payload de Entrada (repr)", style="yellow")
 
-    for c in reporte.crashes[:10]:
+    for c in [*reporte.crashes, *reporte.timeouts][:10]:
         tabla.add_row(
             str(c.id_caso),
             c.senal_error or "CRASH",

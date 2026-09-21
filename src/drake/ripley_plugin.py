@@ -60,7 +60,7 @@ class DrakePlugin:
             ok = ok and rep.ok
             total_runs += rep.total_ejecuciones
             total_crashes += rep.total_crashes
-            for c in rep.crashes:
+            for c in [*rep.crashes, *rep.timeouts]:
                 observaciones.append({
                     "codigo": f"FUZZ_CRASH_{c.senal_error or 'FAIL'}",
                     "severidad": "ERROR",

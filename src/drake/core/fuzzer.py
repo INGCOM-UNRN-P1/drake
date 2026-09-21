@@ -121,6 +121,7 @@ def ejecutar_fuzzing(
                 )
 
         crashes: List[CasoFuzz] = []
+        timeouts: List[CasoFuzz] = []
 
         for i in range(total_runs):
             payload = generar_payload_mutado(i, rng)
@@ -145,7 +146,7 @@ def ejecutar_fuzzing(
 
             except subprocess.TimeoutExpired:
                 t_ms = (time.perf_counter() - t0) * 1000.0
-                crashes.append(CasoFuzz(i + 1, payload, 124, True, t_ms, "TIMEOUT"))
+                timeouts.append(CasoFuzz(i + 1, payload, 124, False, t_ms, "TIMEOUT"))
             except Exception as e:
                 t_ms = (time.perf_counter() - t0) * 1000.0
                 crashes.append(CasoFuzz(i + 1, payload, 1, True, t_ms, str(e)))
@@ -157,6 +158,7 @@ def ejecutar_fuzzing(
             total_ejecuciones=total_runs,
             total_crashes=len(crashes),
             crashes=crashes,
+            timeouts=timeouts,
             semilla=seed,
             cobertura_lineas_porcentaje=cobertura.porcentaje,
             cobertura_medida=cobertura.medida,

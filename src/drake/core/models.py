@@ -23,6 +23,9 @@ class ReporteFuzzing:
     total_ejecuciones: int
     total_crashes: int
     crashes: List[CasoFuzz] = field(default_factory=list)
+    # Corridas que excedieron el timeout (posible bucle infinito): no son
+    # crashes de señal, así que no se mezclan en `total_crashes`.
+    timeouts: List[CasoFuzz] = field(default_factory=list)
     # Semilla de la campaña: con ella se reproduce exactamente la misma
     # secuencia de payloads (`drake fuzz --seed N`).
     semilla: Optional[int] = None
@@ -35,7 +38,11 @@ class ReporteFuzzing:
 
     @property
     def ok(self) -> bool:
-        return self.total_crashes == 0
+        return self.total_crashes == 0 and not self.timeouts
+
+    @property
+    def total_timeouts(self) -> int:
+        return len(self.timeouts)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -44,6 +51,7 @@ class ReporteFuzzing:
             "ok": self.ok,
             "total_ejecuciones": self.total_ejecuciones,
             "total_crashes": self.total_crashes,
+            "total_timeouts": self.total_timeouts,
             "semilla": self.semilla,
             "cobertura_medida": self.cobertura_medida,
             "cobertura_lineas": (
@@ -60,5 +68,9 @@ class ReporteFuzzing:
                     "senal": c.senal_error,
                 }
                 for c in self.crashes[:10]
+            ],
+            "timeouts": [
+                {"id": c.id_caso, "payload": c.payload_input[:100]}
+                for c in self.timeouts[:10]
             ],
         }
