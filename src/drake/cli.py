@@ -47,8 +47,9 @@ def main_callback(
 
 def generar_seccion_markdown(reporte) -> str:
     """Genera sección de auditoría de robustez y fuzzing para Dredd."""
+    status = "ok" if reporte.ok else "fail"
     lines = [
-        "<!-- dredd-section: drake v1.0.0 -->\n",
+        f"<!-- dredd-section: drake, tool=drake, version=1.0.0, status={status} -->\n",
         "## Robustez y Fuzzing de Límites (Drake)\n",
     ]
     lines.append(f"- **Archivo analizado:** `{reporte.archivo.name}`")
