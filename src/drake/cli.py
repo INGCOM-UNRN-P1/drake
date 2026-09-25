@@ -18,6 +18,7 @@ console = Console()
 err_console = Console(stderr=True)
 
 app = typer.Typer(
+    context_settings={"help_option_names": ["-h", "--help"]},
     name="drake",
     help="⚡ DRAKE — Fuzzer pedagógico guiado por límites y analizador de robustez en C.",
     add_completion=True,
