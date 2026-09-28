@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
+from drake import __version__
 from drake.core.fuzzer import ejecutar_fuzzing
 
 _MAIN = re.compile(r"\bmain\s*\(")
@@ -38,7 +39,7 @@ class DrakePlugin:
     """Plugin de fuzzing y testeo con límites para Ripley."""
 
     name = "fuzzing"
-    version = "0.1.0"
+    version = __version__
 
     def is_available(self) -> bool:
         # Fuzzear compila el programa: sin gcc no hay nada que ejecutar.
