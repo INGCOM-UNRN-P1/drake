@@ -21,6 +21,15 @@ wheels = [
 ]
 
 [[package]]
+name = "daedalus"
+version = "0.1.0"
+source = { git = "https://github.com/INGCOM-UNRN-P1/daedalus?rev=cd3eb998193cd5bd9ea881aa9a0e19f5fe6d9a86#cd3eb998193cd5bd9ea881aa9a0e19f5fe6d9a86" }
+dependencies = [
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[[package]]
 name = "drake"
 version = "0.2.0"
 source = { editable = "." }
@@ -30,6 +39,11 @@ dependencies = [
     { name = "typer" },
 ]
 
+[package.optional-dependencies]
+ecosistema = [
+    { name = "daedalus" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -37,10 +51,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "daedalus", marker = "extra == 'ecosistema'", git = "https://github.com/INGCOM-UNRN-P1/daedalus?rev=cd3eb998193cd5bd9ea881aa9a0e19f5fe6d9a86" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.9.0" },
 ]
+provides-extras = ["ecosistema"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=7.4.0" }]

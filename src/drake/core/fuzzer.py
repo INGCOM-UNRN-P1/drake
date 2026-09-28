@@ -57,20 +57,10 @@ def generar_payload_mutado(iteracion: int, rng: Optional[random.Random] = None) 
 def _compilar_con_daedalus(archivo_c: Path, binario: Path) -> Optional[Tuple[bool, int, str]]:
     try:
         from daedalus.core.compiler import compilar_archivos
-        res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0", *FLAGS_COBERTURA])
-        return res.exito, res.codigo_retorno, res.stderr_crudo
     except ImportError:
-        import sys
-        sibling = Path(__file__).resolve().parents[4] / "daedalus" / "src"
-        if sibling.is_dir() and str(sibling) not in sys.path:
-            sys.path.insert(0, str(sibling))
-            try:
-                from daedalus.core.compiler import compilar_archivos
-                res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0", *FLAGS_COBERTURA])
-                return res.exito, res.codigo_retorno, res.stderr_crudo
-            except ImportError:
-                return None
-        return None
+        return None  # sin el extra `ecosistema` se usa el camino propio
+    res = compilar_archivos([archivo_c], binario_salida=binario, flags_adicionales=["-g", "-O0", *FLAGS_COBERTURA])
+    return res.exito, res.codigo_retorno, res.stderr_crudo
 
 
 def ejecutar_fuzzing(
