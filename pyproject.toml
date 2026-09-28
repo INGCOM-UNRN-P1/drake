@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "drake"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fuzzer pedagógico guiado por límites y analizador de cobertura dinámica en C"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
