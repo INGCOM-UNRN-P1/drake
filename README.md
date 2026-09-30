@@ -42,3 +42,31 @@ drake fuzz main.c --runs 50
 # 2. Salida estructurada JSON
 drake fuzz main.c --runs 20 --json
 ```
+
+<!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
+
+## Referencia rápida
+
+### Requisitos
+
+- Python ≥ 3.11 y [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- Programas del sistema: `gcc`.
+
+| Sistema | `gcc` |
+|:--|:--|
+| Debian / Ubuntu | `sudo apt install gcc` |
+| Fedora | `sudo dnf install gcc` |
+| Windows | incluido en el entorno de la cátedra (MSYS2 UCRT64) |
+| macOS | `xcode-select --install` (clang como `gcc`) |
+
+### Comandos
+
+| Comando | Descripción |
+|:--|:--|
+| `drake check`, `drake fuzz` | Ejecuta fuzzing enviando payloads extremos y mutados a la entrada estándar. |
+| `drake report` | Genera directamente la sección de reporte Markdown de DRAKE para Dredd. |
+| `drake doctor` | Verifica el estado del entorno de DRAKE (Python, GCC). |
+
+Ayuda de cada comando: `drake <comando> -h`.
+
+<!-- p1:referencia:fin -->
