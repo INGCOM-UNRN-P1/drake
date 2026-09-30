@@ -11,7 +11,7 @@ runner = CliRunner()
 def test_cli_version():
     res = runner.invoke(app, ["--version"])
     assert res.exit_code == 0
-    assert "DRAKE" in res.stdout
+    assert res.stdout.startswith("drake ")  # formato común de yutani: «nombre versión»
 
 
 def test_cli_fuzz_json(tmp_path):

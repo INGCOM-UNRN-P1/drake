@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from yutani.cli import crear_app
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -17,33 +18,14 @@ from drake.core.fuzzer import ejecutar_fuzzing
 console = Console()
 err_console = Console(stderr=True)
 
-app = typer.Typer(
-    context_settings={"help_option_names": ["-h", "--help"]},
-    name="drake",
-    help="⚡ DRAKE — Fuzzer pedagógico guiado por límites y analizador de robustez en C.",
+# Contrato de línea de comandos del ecosistema (-h/--help, --version/-v, errores de datos como
+# mensajes) y textos de Typer en español, desde yutani (N-ECO-14).
+app = crear_app(
+    "drake",
+    __version__,
+    "⚡ DRAKE — Fuzzer pedagógico guiado por límites y analizador de robustez en C.",
     add_completion=True,
-    no_args_is_help=True,
 )
-
-
-def _version_callback(value: bool) -> None:
-    if value:
-        console.print(f"[bold cyan]DRAKE[/bold cyan] versión [bold]{__version__}[/bold]")
-        raise typer.Exit(code=0)
-
-
-@app.callback()
-def main_callback(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-v",
-        help="Muestra la versión de DRAKE.",
-        callback=_version_callback,
-        is_eager=True,
-    ),
-) -> None:
-    pass
 
 
 def generar_seccion_markdown(reporte) -> str:
