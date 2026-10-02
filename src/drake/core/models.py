@@ -15,6 +15,8 @@ class CasoFuzz:
     es_crash: bool
     tiempo_ms: float
     senal_error: Optional[str] = None
+    # La entrada más chica que sigue provocando la misma falla (QoL #264).
+    payload_minimo: Optional[str] = None
 
 
 @dataclass
@@ -66,6 +68,7 @@ class ReporteFuzzing:
                     "payload": c.payload_input[:100],
                     "codigo_retorno": c.codigo_retorno,
                     "senal": c.senal_error,
+                    "payload_minimo": c.payload_minimo,
                 }
                 for c in self.crashes[:10]
             ],

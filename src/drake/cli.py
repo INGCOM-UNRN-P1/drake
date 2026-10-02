@@ -61,6 +61,8 @@ def fuzz_cmd(
     seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla para reproducir una campaña exacta (por defecto al azar; se informa en el reporte)."),
     json_output: bool = typer.Option(False, "--json", help="Salida estructurada en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
+    guardar_casos_dir: Optional[Path] = typer.Option(None, "--guardar-casos", help="Guardar cada entrada mínima que hace fallar al programa como caso de nostromo (crash_NN.in)."),
+    modelo: Optional[Path] = typer.Option(None, "--modelo", exists=True, dir_okay=False, help="Con --guardar-casos: solución modelo para escribir también la salida esperada (crash_NN.out)."),
 ) -> None:
     """Ejecuta fuzzing enviando payloads extremos y mutados a la entrada estándar."""
     if not fuente.is_file():
@@ -68,6 +70,16 @@ def fuzz_cmd(
         raise typer.Exit(code=2)
 
     reporte = ejecutar_fuzzing(fuente, total_runs=runs, timeout_por_run=timeout, seed=seed)
+
+    if guardar_casos_dir and reporte.crashes:
+        from drake.core.fuzzer import guardar_casos
+        try:
+            escritos = guardar_casos(reporte, guardar_casos_dir, modelo)
+        except RuntimeError as e:
+            err_console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(code=2)
+        err_console.print(f"[green]✓ {len(escritos)} archivos de casos en[/green] [cyan]{guardar_casos_dir}[/cyan]"
+                          + ("" if modelo else " [dim](sin --modelo, solo las entradas)[/dim]"))
 
     if output_md:
         md_text = generar_seccion_markdown(reporte)
@@ -188,6 +200,52 @@ def doctor_cmd(
 
 def main() -> None:
     app()
+
+
+@app.command("gen-casos")
+def gen_casos(
+    modelo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Solución modelo de la cátedra (.c)."),
+    salida: Path = typer.Option(Path("casos"), "--salida", "-o", help="Directorio destino de los pares caso_NN.in/.out."),
+    spec: Optional[Path] = typer.Option(None, "--spec", help="spec.yaml opcional (tipo_entrada, semillas_extra, tamano_max)."),
+    cantidad: int = typer.Option(12, "--cantidad", "-n", help="Máximo de testcases a generar."),
+    segundos: int = typer.Option(15, "--segundos", help="Tiempo de fuzzing si hay clang/libFuzzer."),
+    sin_libfuzzer: bool = typer.Option(False, "--sin-libfuzzer", help="Fuerza el modo determinista."),
+    json_output: bool = typer.Option(False, "--json", help="Emitir el resultado en JSON."),
+) -> None:
+    """Genera casos límite (caso_NN.in/.out) contra la solución modelo, con la salida esperada."""
+    import json as _json
+
+    from drake.core.generar_casos import generar_testcases
+
+    espec = None
+    if spec:
+        import yaml
+        espec = yaml.safe_load(spec.read_text(encoding="utf-8"))
+    try:
+        resultado = generar_testcases(modelo, salida, spec=espec, cantidad_maxima=cantidad,
+                                      usar_libfuzzer=not sin_libfuzzer, segundos_fuzz=segundos)
+    except RuntimeError as e:
+        console.print(f"[bold red]✗ {e}[/bold red]")
+        raise typer.Exit(code=1)
+    if json_output:
+        print(_json.dumps({"schema_version": "1.0.0", "herramienta": "drake", "comando": "gen-casos",
+                           "modo": resultado.modo,
+                           "generados": [[str(i), str(o)] for i, o in resultado.generados],
+                           "descartados_duplicados": resultado.descartados_duplicados,
+                           "problematicos": [str(c) for c in resultado.crashes]}, ensure_ascii=False, indent=2))
+        return
+    tabla = Table(title=f"Testcases generados (modo: {resultado.modo})")
+    tabla.add_column("Entrada", style="cyan")
+    tabla.add_column("Salida esperada", style="green")
+    for in_p, out_p in resultado.generados:
+        tabla.add_row(in_p.name, out_p.name)
+    console.print(tabla)
+    console.print(f"\n[green]✓ {len(resultado.generados)} casos generados[/green] · "
+                  f"{resultado.descartados_duplicados} duplicados descartados")
+    if resultado.crashes:
+        console.print(f"[yellow]⚠ {len(resultado.crashes)} candidatos problemáticos:[/yellow]")
+        for c in resultado.crashes[:5]:
+            console.print(f"   · {c}")
 
 
 if __name__ == "__main__":

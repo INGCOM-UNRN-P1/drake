@@ -63,6 +63,47 @@ def _compilar_con_daedalus(archivo_c: Path, binario: Path) -> Optional[Tuple[boo
     return res.exito, res.codigo_retorno, res.stderr_crudo
 
 
+def _senal(binario: Path, entrada: str, timeout: float) -> Optional[str]:
+    """La señal con la que termina el programa para esa entrada (None si no falla)."""
+    try:
+        res = subprocess.run([str(binario.resolve())], input=entrada, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    ret = res.returncode
+    if ret < 0:
+        return {11: "SIGSEGV", 6: "SIGABRT", 8: "SIGFPE"}.get(-ret, f"SIGNAL_{-ret}")
+    if ret > 128:
+        return f"SIGNAL_{ret - 128}"
+    return None
+
+
+def minimizar_entrada(binario: Path, entrada: str, senal: str, timeout: float = 1.0, max_pruebas: int = 300) -> str:
+    """La entrada más chica que provoca la misma señal (delta debugging, primero por líneas y
+    después por caracteres): con 4096 «A» el estudiante no ve qué falla; con 12, sí."""
+    actual = entrada
+    pruebas = 0
+    for separar, unir in ((lambda t: t.splitlines(keepends=True), "".join), (list, "".join)):
+        partes = separar(actual)
+        n = 2
+        while len(partes) >= 2 and pruebas < max_pruebas:
+            tam = max(1, len(partes) // n)
+            redujo = False
+            for i in range(0, len(partes), tam):
+                candidato = partes[:i] + partes[i + tam:]
+                pruebas += 1
+                if candidato and _senal(binario, unir(candidato), timeout) == senal:
+                    partes, n, redujo = candidato, max(n - 1, 2), True
+                    break
+                if pruebas >= max_pruebas:
+                    break
+            if not redujo:
+                if tam == 1:
+                    break
+                n = min(len(partes), n * 2)
+        actual = unir(partes)
+    return actual
+
+
 def ejecutar_fuzzing(
     archivo_c: Path,
     total_runs: int = 50,
@@ -141,6 +182,15 @@ def ejecutar_fuzzing(
                 t_ms = (time.perf_counter() - t0) * 1000.0
                 crashes.append(CasoFuzz(i + 1, payload, 1, True, t_ms, str(e)))
 
+        # Una entrada mínima por cada tipo de falla (con el binario todavía disponible).
+        minimizadas: dict = {}
+        for c in crashes:
+            if c.senal_error and c.senal_error.startswith("SIG") and c.payload_input:
+                if c.senal_error not in minimizadas:
+                    minimizadas[c.senal_error] = minimizar_entrada(binario, c.payload_input, c.senal_error,
+                                                                   timeout_por_run)
+                c.payload_minimo = minimizadas[c.senal_error]
+
         cobertura = medir_cobertura(archivo_c, tmp_path)
 
         return ReporteFuzzing(
@@ -154,3 +204,38 @@ def ejecutar_fuzzing(
             cobertura_medida=cobertura.medida,
             cobertura_detalle=cobertura.resumen,
         )
+
+
+def guardar_casos(reporte: ReporteFuzzing, directorio: Path, modelo: Optional[Path] = None) -> List[Path]:
+    """Guarda cada entrada mínima que hace fallar al programa como caso de nostromo (crash_NN.in).
+
+    Con la solución modelo, también la salida esperada (crash_NN.out): así el caso queda en la suite
+    y el arreglo del estudiante se puede verificar. Sin modelo solo se escribe la entrada.
+    """
+    from drake.core.generar_casos import compilar_modelo, ejecutar_modelo
+
+    entradas: List[str] = []
+    for c in reporte.crashes:
+        minima = c.payload_minimo or c.payload_input
+        if minima and minima not in entradas:
+            entradas.append(minima)
+    directorio.mkdir(parents=True, exist_ok=True)
+    escritos: List[Path] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        binario = None
+        if modelo is not None:
+            binario = Path(tmp) / "modelo.bin"
+            ok, err, _ = compilar_modelo(modelo, binario)
+            if not ok:
+                raise RuntimeError(f"No se pudo compilar el modelo: {err}")
+        for n, entrada in enumerate(entradas, 1):
+            ruta_in = directorio / f"crash_{n:02d}.in"
+            ruta_in.write_text(entrada, encoding="utf-8")
+            escritos.append(ruta_in)
+            if binario is not None:
+                _, salida = ejecutar_modelo(binario, entrada)
+                ruta_out = ruta_in.with_suffix(".out")
+                ruta_out.write_text(salida, encoding="utf-8")
+                escritos.append(ruta_out)
+    return escritos
+
