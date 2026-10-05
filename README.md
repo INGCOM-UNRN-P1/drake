@@ -66,12 +66,13 @@ drake fuzz main.c --runs 20 --json
 | `drake check`, `drake fuzz` | Ejecuta fuzzing enviando payloads extremos y mutados a la entrada estándar. |
 | `drake report` | Genera directamente la sección de reporte Markdown de DRAKE para Dredd. |
 | `drake doctor` | Verifica el estado del entorno de DRAKE (Python, GCC). |
+| `drake gen-casos` | Genera casos límite (caso_NN.in/.out) contra la solución modelo, con la salida esperada. |
 
 Ayuda de cada comando: `drake <comando> -h`.
 
 ### Salida JSON
 
-Con `--json`, estos comandos emiten el resultado como JSON por la salida estándar, para usarlo desde scripts, ripley o dredd: `drake check`, `drake fuzz`, `drake doctor`. El de `doctor --json` lleva `schema_version` y `ok`.
+Con `--json`, estos comandos emiten el resultado como JSON por la salida estándar, para usarlo desde scripts, ripley o dredd: `drake check`, `drake fuzz`, `drake doctor`, `drake gen-casos`. El de `doctor --json` lleva `schema_version` y `ok`.
 
 ### Códigos de salida
 
