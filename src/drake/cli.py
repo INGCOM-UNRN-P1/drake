@@ -77,7 +77,7 @@ def fuzz_cmd(
             escritos = guardar_casos(reporte, guardar_casos_dir, modelo)
         except RuntimeError as e:
             err_console.print(f"[red]Error:[/red] {e}")
-            raise typer.Exit(code=2)
+            raise typer.Exit(code=2) from e
         err_console.print(f"[green]✓ {len(escritos)} archivos de casos en[/green] [cyan]{guardar_casos_dir}[/cyan]"
                           + ("" if modelo else " [dim](sin --modelo, solo las entradas)[/dim]"))
 
@@ -226,7 +226,7 @@ def gen_casos(
                                       usar_libfuzzer=not sin_libfuzzer, segundos_fuzz=segundos)
     except RuntimeError as e:
         console.print(f"[bold red]✗ {e}[/bold red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
     if json_output:
         print(_json.dumps({"schema_version": "1.0.0", "herramienta": "drake", "comando": "gen-casos",
                            "modo": resultado.modo,
