@@ -73,7 +73,7 @@ class ReporteFuzzing:
                 for c in self.crashes[:10]
             ],
             "timeouts": [
-                {"id": c.id_caso, "payload": c.payload_input[:100]}
+                {"id": c.id_caso, "payload": c.payload_input[:100], "payload_minimo": c.payload_minimo}
                 for c in self.timeouts[:10]
             ],
         }

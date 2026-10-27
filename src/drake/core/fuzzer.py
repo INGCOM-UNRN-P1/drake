@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
 from drake.core.cobertura import FLAGS_COBERTURA, medir_cobertura
@@ -180,6 +181,16 @@ def _acortar_rachas(texto: str, falla: Callable[[str], bool]) -> str:
         inicio = m.start() + alto
 
 
+def _no_termina(binario: Path, entrada: str, timeout: float) -> bool:
+    try:
+        subprocess.run([str(binario.resolve())], input=entrada, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return True
+    except OSError:
+        return False
+    return False
+
+
 def minimizar_entrada(binario: Path, entrada: str, senal: str, timeout: float = 1.0, max_pruebas: int = 300,
                       falla: Optional[Callable[[str], bool]] = None) -> str:
     """La entrada más chica y legible que provoca la misma señal (QoL #264): con 4096 «A» el estudiante
@@ -207,9 +218,9 @@ def minimizar_entrada(binario: Path, entrada: str, senal: str, timeout: float = 
     actual = _imprimibles(actual, sigue_fallando)
     actual = _acortar_rachas(actual, sigue_fallando)
     # Un .in termina en un salto de línea, sin espacios colgando, si eso no cambia la falla.
-    for final in (actual.rstrip() + "\n", actual.rstrip()):
-        if final != actual and sigue_fallando(final):
-            return final
+    canonica = actual.rstrip() + "\n"
+    if canonica != actual and sigue_fallando(canonica):
+        return canonica
     return actual
 
 
@@ -299,6 +310,12 @@ def ejecutar_fuzzing(
                     minimizadas[c.senal_error] = minimizar_entrada(binario, c.payload_input, c.senal_error,
                                                                    timeout_por_run)
                 c.payload_minimo = minimizadas[c.senal_error]
+        # También el primer timeout: cada prueba espera el timeout entero, así que con pocas pruebas.
+        if timeouts and timeouts[0].payload_input:
+            minima = minimizar_entrada(binario, timeouts[0].payload_input, "TIMEOUT", timeout_por_run, max_pruebas=25,
+                                       falla=lambda e: _no_termina(binario, e, timeout_por_run))
+            for t in timeouts:  # como con las señales: todos los timeouts son la misma falla
+                t.payload_minimo = minima
 
         cobertura = medir_cobertura(archivo_c, tmp_path)
 
@@ -315,21 +332,39 @@ def ejecutar_fuzzing(
         )
 
 
-def guardar_casos(reporte: ReporteFuzzing, directorio: Path, modelo: Optional[Path] = None) -> List[Path]:
-    """Guarda cada entrada mínima que hace fallar al programa como caso de nostromo (crash_NN.in).
+@dataclass
+class CasosGuardados:
+    escritos: List[Path] = field(default_factory=list)
+    ya_estaban: int = 0  # entradas que la suite ya tenía (con cualquier nombre)
+    descartados: List[str] = field(default_factory=list)  # entradas con las que el modelo tampoco anda
 
-    Con la solución modelo, también la salida esperada (crash_NN.out): así el caso queda en la suite
-    y el arreglo del estudiante se puede verificar. Sin modelo solo se escribe la entrada.
+
+_RE_CASO_DRAKE = re.compile(r"^crash_(\d+)$")
+
+
+def guardar_casos(reporte: ReporteFuzzing, directorio: Path, modelo: Optional[Path] = None) -> CasosGuardados:
+    """Agrega a la suite de regresión del TP cada entrada mínima que hace fallar al programa (Ola 13).
+
+    Cada caso queda como `crash_NN.in` con `crash_NN.tags` («regresion drake SIGSEGV» o «timeout»:
+    `nostromo test prog tests/ --etiqueta regresion` corre sólo esos). Con la solución modelo se
+    escribe también `crash_NN.out`, y sólo entran los casos que el modelo supera (termina con 0, que es
+    lo que exige nostromo): uno en el que el modelo también falla no sirve de regresión. La numeración
+    sigue después de los `crash_NN` que ya hay y no se repite una entrada que la suite ya tenga, así que
+    correr drake de nuevo no pisa ni duplica casos.
     """
     from drake.core.generar_casos import compilar_modelo, ejecutar_modelo
 
-    entradas: List[str] = []
-    for c in reporte.crashes:
+    entradas: List[Tuple[str, str]] = []
+    for c in [*reporte.crashes, *reporte.timeouts]:
         minima = c.payload_minimo or c.payload_input
-        if minima and minima not in entradas:
-            entradas.append(minima)
+        if c.senal_error == "COMPILATION_ERROR" or not minima or any(minima == e for e, _ in entradas):
+            continue
+        entradas.append((minima, "timeout" if c.senal_error == "TIMEOUT" else (c.senal_error or "crash")))
     directorio.mkdir(parents=True, exist_ok=True)
-    escritos: List[Path] = []
+    existentes = {p.read_text(encoding="utf-8", errors="replace") for p in directorio.glob("*.in")}
+    numeros = [int(m[1]) for p in directorio.glob("crash_*.in") if (m := _RE_CASO_DRAKE.match(p.stem))]
+    siguiente = max(numeros, default=0) + 1
+    resultado = CasosGuardados()
     with tempfile.TemporaryDirectory() as tmp:
         binario = None
         if modelo is not None:
@@ -337,14 +372,24 @@ def guardar_casos(reporte: ReporteFuzzing, directorio: Path, modelo: Optional[Pa
             ok, err, _ = compilar_modelo(modelo, binario)
             if not ok:
                 raise RuntimeError(f"No se pudo compilar el modelo: {err}")
-        for n, entrada in enumerate(entradas, 1):
-            ruta_in = directorio / f"crash_{n:02d}.in"
-            ruta_in.write_text(entrada, encoding="utf-8")
-            escritos.append(ruta_in)
+        for entrada, motivo in entradas:
+            if entrada in existentes:
+                resultado.ya_estaban += 1
+                continue
+            salida = None
             if binario is not None:
-                _, salida = ejecutar_modelo(binario, entrada)
-                ruta_out = ruta_in.with_suffix(".out")
-                ruta_out.write_text(salida, encoding="utf-8")
-                escritos.append(ruta_out)
-    return escritos
-
+                rc, salida = ejecutar_modelo(binario, entrada)
+                if rc != 0:
+                    detalle = "no termina" if rc == 124 else f"termina con código {rc}"
+                    resultado.descartados.append(f"{entrada[:40]!r}: el modelo también {detalle}")
+                    continue
+            ruta_in = directorio / f"crash_{siguiente:02d}.in"
+            ruta_in.write_text(entrada, encoding="utf-8")
+            ruta_in.with_suffix(".tags").write_text(f"regresion drake {motivo}\n", encoding="utf-8")
+            resultado.escritos += [ruta_in, ruta_in.with_suffix(".tags")]
+            if salida is not None:
+                ruta_in.with_suffix(".out").write_text(salida, encoding="utf-8")
+                resultado.escritos.append(ruta_in.with_suffix(".out"))
+            existentes.add(entrada)
+            siguiente += 1
+    return resultado

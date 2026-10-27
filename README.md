@@ -42,7 +42,21 @@ drake fuzz main.c --runs 50
 
 # 2. Salida estructurada JSON
 drake fuzz main.c --runs 20 --json
+
+# 3. Lo que rompe al programa, a la suite de regresión del TP (con la salida de la solución)
+drake fuzz main.c --guardar-casos tests/ --modelo solucion.c
+nostromo test ./programa tests/ --etiqueta regresion
 ```
+
+### Suite de regresión
+
+Con `--guardar-casos DIR`, cada entrada mínima que hace caer o colgar al programa se agrega a la
+suite como `crash_NN.in`, con `crash_NN.tags` (`regresion drake SIGSEGV`, `regresion drake
+timeout`…) para correrlos solos con `nostromo test … --etiqueta regresion`. Con `--modelo` se
+escribe también `crash_NN.out` con la salida de la solución, y sólo entran los casos que la
+solución supera (termina con 0, como exige nostromo): uno en el que la solución también falla se
+informa y no se agrega. La numeración sigue después de los `crash_NN` que ya haya y no se repite
+una entrada que la suite ya tenga, así que volver a correr drake no pisa ni duplica casos.
 
 <!-- p1:referencia:inicio — generado por p1-tools/scripts/readme_generado.py: no editar a mano -->
 

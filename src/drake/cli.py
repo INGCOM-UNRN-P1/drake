@@ -61,7 +61,7 @@ def fuzz_cmd(
     seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla para reproducir una campaña exacta (por defecto al azar; se informa en el reporte)."),
     json_output: bool = typer.Option(False, "--json", help="Salida estructurada en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
-    guardar_casos_dir: Optional[Path] = typer.Option(None, "--guardar-casos", help="Guardar cada entrada mínima que hace fallar al programa como caso de nostromo (crash_NN.in)."),
+    guardar_casos_dir: Optional[Path] = typer.Option(None, "--guardar-casos", help="Agregar a esta suite cada entrada mínima que hace fallar o colgar al programa, como caso de nostromo (crash_NN.in y .tags con «regresion»); sigue la numeración y no repite casos."),
     modelo: Optional[Path] = typer.Option(None, "--modelo", exists=True, dir_okay=False, help="Con --guardar-casos: solución modelo para escribir también la salida esperada (crash_NN.out)."),
 ) -> None:
     """Ejecuta fuzzing enviando payloads extremos y mutados a la entrada estándar."""
@@ -71,15 +71,20 @@ def fuzz_cmd(
 
     reporte = ejecutar_fuzzing(fuente, total_runs=runs, timeout_por_run=timeout, seed=seed)
 
-    if guardar_casos_dir and reporte.crashes:
+    if guardar_casos_dir and (reporte.crashes or reporte.timeouts):
         from drake.core.fuzzer import guardar_casos
         try:
-            escritos = guardar_casos(reporte, guardar_casos_dir, modelo)
+            guardados = guardar_casos(reporte, guardar_casos_dir, modelo)
         except RuntimeError as e:
             err_console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(code=2) from e
-        err_console.print(f"[green]✓ {len(escritos)} archivos de casos en[/green] [cyan]{guardar_casos_dir}[/cyan]"
-                          + ("" if modelo else " [dim](sin --modelo, solo las entradas)[/dim]"))
+        nuevos = sum(1 for p in guardados.escritos if p.suffix == ".in")
+        err_console.print(f"[green]✓ {nuevos} casos de regresión nuevos en[/green] [cyan]{guardar_casos_dir}[/cyan]"
+                          + (f" [dim]({guardados.ya_estaban} ya estaban)[/dim]" if guardados.ya_estaban else "")
+                          + ("" if modelo else " [dim](sin --modelo, solo las entradas: falta el .out)[/dim]"))
+        for descartado in guardados.descartados:
+            err_console.print(f"[yellow]⚠ No se agregó {descartado}: como caso de nostromo fallaría también "
+                              "para la solución.[/yellow]")
 
     if output_md:
         md_text = generar_seccion_markdown(reporte)
