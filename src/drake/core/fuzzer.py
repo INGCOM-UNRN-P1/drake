@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import random
+import re
 import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from drake.core.cobertura import FLAGS_COBERTURA, medir_cobertura
 from drake.core.models import CasoFuzz, ReporteFuzzing
@@ -77,30 +78,138 @@ def _senal(binario: Path, entrada: str, timeout: float) -> Optional[str]:
     return None
 
 
-def minimizar_entrada(binario: Path, entrada: str, senal: str, timeout: float = 1.0, max_pruebas: int = 300) -> str:
-    """La entrada más chica que provoca la misma señal (delta debugging, primero por líneas y
-    después por caracteres): con 4096 «A» el estudiante no ve qué falla; con 12, sí."""
-    actual = entrada
-    pruebas = 0
-    for separar, unir in ((lambda t: t.splitlines(keepends=True), "".join), (list, "".join)):
-        partes = separar(actual)
-        n = 2
-        while len(partes) >= 2 and pruebas < max_pruebas:
-            tam = max(1, len(partes) // n)
-            redujo = False
-            for i in range(0, len(partes), tam):
-                candidato = partes[:i] + partes[i + tam:]
-                pruebas += 1
-                if candidato and _senal(binario, unir(candidato), timeout) == senal:
-                    partes, n, redujo = candidato, max(n - 1, 2), True
-                    break
-                if pruebas >= max_pruebas:
-                    break
-            if not redujo:
-                if tam == 1:
-                    break
-                n = min(len(partes), n * 2)
-        actual = unir(partes)
+def _ddmin(partes: List[str], falla: Callable[[str], bool]) -> List[str]:
+    """Delta debugging: quita trozos de `partes` mientras la entrada que quede siga fallando."""
+    n = 2
+    while len(partes) >= 2:
+        tam = max(1, len(partes) // n)
+        redujo = False
+        for i in range(0, len(partes), tam):
+            candidato = partes[:i] + partes[i + tam:]
+            if candidato and falla("".join(candidato)):
+                partes, n, redujo = candidato, max(n - 1, 2), True
+                break
+        if not redujo:
+            if tam == 1:
+                break
+            n = min(len(partes), n * 2)
+    return partes
+
+
+_RE_NUMERO = re.compile(r"-?\d+")
+
+
+def _numeros_chicos(texto: str, falla: Callable[[str], bool]) -> str:
+    """Cada entero, por el más chico que mantiene la falla: 0, 1, -1, 2… o la mitad (QoL #264)."""
+    inicio = 0
+    while True:
+        m = _RE_NUMERO.search(texto, inicio)
+        if not m:
+            return texto
+        valor = int(m[0])
+        candidatos = [0, 1, -1, 2, -2, 10, -10, 100]
+        mitad = valor
+        while abs(mitad) > 1:
+            mitad //= 2
+            candidatos.append(mitad)
+        antes, despues = texto[:m.start()], texto[m.end():]
+
+        def con(v: int, antes: str = antes, despues: str = despues) -> str:
+            return antes + str(v) + despues
+
+        elegido = valor
+        sin_falla: Optional[int] = None  # el mayor candidato (en valor absoluto) que no falló
+        for c in sorted({c for c in candidatos if abs(c) < abs(valor)}, key=lambda c: (abs(c), c < 0)):
+            if falla(con(c)):
+                elegido = c
+                break
+            if (c >= 0) == (valor >= 0):
+                sin_falla = c
+        # Si falla con 72 y no con 36, el borde está en el medio: se busca por bisección (51 dice
+        # más que 72). Cada paso se verifica, así que el resultado siempre sigue fallando.
+        if sin_falla is not None and (elegido >= 0) == (sin_falla >= 0) and abs(elegido) - abs(sin_falla) > 1:
+            bajo, alto = abs(sin_falla) + 1, abs(elegido)
+            signo = -1 if elegido < 0 else 1
+            while bajo < alto:
+                medio = (bajo + alto) // 2
+                if falla(con(signo * medio)):
+                    alto = medio
+                else:
+                    bajo = medio + 1
+            elegido = signo * alto
+        reemplazo = str(elegido)
+        texto = con(elegido)
+        inicio = m.start() + len(reemplazo)
+
+
+def _imprimibles(texto: str, falla: Callable[[str], bool]) -> str:
+    """Los bytes nulos y de control (salvo salto de línea y tabulación) se borran o pasan a 'a'."""
+    i = 0
+    while i < len(texto):
+        c = texto[i]
+        if c.isprintable() or c in "\n\t":
+            i += 1
+            continue
+        for reemplazo in ("", "a"):
+            prueba = texto[:i] + reemplazo + texto[i + 1:]
+            if falla(prueba):
+                texto = prueba
+                break
+        else:
+            i += 1
+            continue
+        i += len(reemplazo)
+    return texto
+
+
+def _acortar_rachas(texto: str, falla: Callable[[str], bool]) -> str:
+    """Una racha del mismo carácter (4096 «A») se acorta al largo mínimo que sigue fallando."""
+    inicio = 0
+    while True:
+        m = re.compile(r"(.)\1{3,}", re.S).search(texto, inicio)
+        if not m:
+            return texto
+        bajo, alto = 1, len(m[0])  # el largo `alto` falla; se busca el menor que también falle
+        while bajo < alto:
+            medio = (bajo + alto) // 2
+            if falla(texto[:m.start()] + m[1] * medio + texto[m.end():]):
+                alto = medio
+            else:
+                bajo = medio + 1
+        texto = texto[:m.start()] + m[1] * alto + texto[m.end():]
+        inicio = m.start() + alto
+
+
+def minimizar_entrada(binario: Path, entrada: str, senal: str, timeout: float = 1.0, max_pruebas: int = 300,
+                      falla: Optional[Callable[[str], bool]] = None) -> str:
+    """La entrada más chica y legible que provoca la misma señal (QoL #264): con 4096 «A» el estudiante
+    no ve qué falla; con 15, sí.
+
+    Por fases, cada una sin perder la falla: quita líneas y después palabras (delta debugging),
+    achica los enteros (0, 1, -1… antes que 2147483647), borra o reemplaza por 'a' los bytes
+    nulos y de control, y acorta las rachas del mismo carácter. No recorta carácter por carácter:
+    eso partía números y juntaba palabras en algo ilegible. `falla` reemplaza el criterio (por
+    ejemplo, «no termina a tiempo»).
+    """
+    pruebas = [0]
+
+    def sigue_fallando(candidato: str) -> bool:
+        if not candidato or pruebas[0] >= max_pruebas:
+            return False
+        pruebas[0] += 1
+        if falla is not None:
+            return falla(candidato)
+        return _senal(binario, candidato, timeout) == senal
+
+    actual = "".join(_ddmin(entrada.splitlines(keepends=True), sigue_fallando))
+    actual = "".join(_ddmin(re.findall(r"\S+\s*|\s+", actual), sigue_fallando))
+    actual = _numeros_chicos(actual, sigue_fallando)
+    actual = _imprimibles(actual, sigue_fallando)
+    actual = _acortar_rachas(actual, sigue_fallando)
+    # Un .in termina en un salto de línea, sin espacios colgando, si eso no cambia la falla.
+    for final in (actual.rstrip() + "\n", actual.rstrip()):
+        if final != actual and sigue_fallando(final):
+            return final
     return actual
 
 

@@ -13,6 +13,7 @@ DRAKE es una herramienta de fuzzing liviana que genera entradas con valores lím
 - Inyección automatizada de vectores de prueba con valores extremos (`INT_MAX`, `INT_MIN`, `UINT_MAX`, `0`, cadenas vacías, cadenas gigantes, caracteres no ASCII).
 - Detección de caídas prematuras por segfault, desbordamientos de búfer en terminal y bucles infinitos.
 - Emisión de reportes con entradas reproducibles mínimas para depuración.
+- La entrada mínima es legible: quita líneas y palabras que no hacen a la falla, achica cada entero al más chico que la mantiene (con el borde exacto: «falla con 51», no con 73920), borra o reemplaza los bytes nulos y de control, acorta las rachas («A» × 4096 → las justas) y termina en un salto de línea.
 
 ### Qué no cubre (Límites y Delegación)
 - Aislamiento del proceso con namespaces y cgroups (delegado a `nostromo`).
