@@ -308,7 +308,7 @@ def ejecutar_fuzzing(
             if c.senal_error and c.senal_error.startswith("SIG") and c.payload_input:
                 if c.senal_error not in minimizadas:
                     minimizadas[c.senal_error] = minimizar_entrada(binario, c.payload_input, c.senal_error,
-                                                                   timeout_por_run)
+                                                                   max(timeout_por_run, 1.0))
                 c.payload_minimo = minimizadas[c.senal_error]
         # También el primer timeout: cada prueba espera el timeout entero, así que con pocas pruebas.
         if timeouts and timeouts[0].payload_input:
