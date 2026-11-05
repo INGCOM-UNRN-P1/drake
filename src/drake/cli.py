@@ -41,7 +41,7 @@ def generar_seccion_markdown(reporte) -> str:
     if reporte.ok:
         lines.append("> [!TIP]\n> **Robustez Verificada:** El programa resistió todas las entradas extremas (INT_MAX, overflows, strings largos, null bytes) sin colapsar.\n")
     else:
-        lines.append("> [!WARNING]\n> **Vulnerabilidad de Robustez:** El programa cayó en crashes ante payloads límite.\n")
+        lines.append("> [!WARNING]\n> **Vulnerabilidad de Robustez:** El programa falló ante payloads límite.\n")
         lines.append("| Run # | Señal / Diagnóstico | Tiempo | Payload de Entrada |")
         lines.append("| :---: | :--- | :---: | :--- |")
         for c in reporte.crashes[:10]:
@@ -57,7 +57,7 @@ def generar_seccion_markdown(reporte) -> str:
 def fuzz_cmd(
     fuente: Path = typer.Argument(..., help="Archivo C a someter a fuzzing."),
     runs: int = typer.Option(50, "--runs", "-n", help="Cantidad de ejecuciones con mutaciones."),
-    timeout: float = typer.Option(1.0, "--timeout", "-t", help="Timeout máximo por corrida en segundos."),
+    timeout: float = typer.Option(1.0, "--timeout", "-t", help="Tiempo límite por corrida en segundos."),
     seed: Optional[int] = typer.Option(None, "--seed", "-s", help="Semilla para reproducir una campaña exacta (por defecto al azar; se informa en el reporte)."),
     json_output: bool = typer.Option(False, "--json", help="Salida estructurada en JSON."),
     output_md: Optional[Path] = typer.Option(None, "--md", "--output-md", "-o", help="Generar sección de reporte en formato Markdown para fusión en Dredd."),
@@ -108,10 +108,10 @@ def fuzz_cmd(
 
     console.print(
         f"\n[bold red]💥 Se detectaron {reporte.total_crashes} crashes y "
-        f"{reporte.total_timeouts} timeouts durante el fuzzing:[/bold red]\n"
+        f"{reporte.total_timeouts} cortes por tiempo límite durante el fuzzing:[/bold red]\n"
     )
 
-    tabla = Table(title=f"Crashes Detectados por Fuzzing en {fuente.name}")
+    tabla = Table(title=f"Fallas Detectadas por Fuzzing en {fuente.name}")
     tabla.add_column("# Run", justify="center")
     tabla.add_column("Señal / Fallo", style="bold red")
     tabla.add_column("Tiempo", justify="right")
@@ -212,7 +212,7 @@ def gen_casos(
     modelo: Path = typer.Argument(..., exists=True, dir_okay=False, help="Solución modelo de la cátedra (.c)."),
     salida: Path = typer.Option(Path("casos"), "--salida", "-o", help="Directorio destino de los pares caso_NN.in/.out."),
     spec: Optional[Path] = typer.Option(None, "--spec", help="spec.yaml opcional (tipo_entrada, semillas_extra, tamano_max)."),
-    cantidad: int = typer.Option(12, "--cantidad", "-n", help="Máximo de testcases a generar."),
+    cantidad: int = typer.Option(12, "--cantidad", "-n", help="Máximo de casos de prueba a generar."),
     segundos: int = typer.Option(15, "--segundos", help="Tiempo de fuzzing si hay clang/libFuzzer."),
     sin_libfuzzer: bool = typer.Option(False, "--sin-libfuzzer", help="Fuerza el modo determinista."),
     json_output: bool = typer.Option(False, "--json", help="Emitir el resultado en JSON."),

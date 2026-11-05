@@ -66,7 +66,7 @@ class DrakePlugin:
                     "codigo": f"FUZZ_CRASH_{c.senal_error or 'FAIL'}",
                     "severidad": "ERROR",
                     "archivo": str(programa),
-                    "mensaje": f"Fuzzing provocó un crash ({c.senal_error}) con el payload: {repr(c.payload_input[:30])}",
+                    "mensaje": f"El fuzzing provocó una falla ({c.senal_error}) con el payload: {repr(c.payload_input[:30])}",
                 })
 
         return {

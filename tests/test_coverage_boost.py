@@ -50,7 +50,7 @@ def test_cli_fuzz_rich_success_and_fail(tmp_path):
     """)
     res_c = runner.invoke(app, ["fuzz", str(f_crash), "--runs", "10"])
     assert res_c.exit_code == 1
-    assert "Crashes Detectados" in res_c.stdout
+    assert "Fallas Detectadas" in res_c.stdout
 
 
 def test_cli_file_not_found():
